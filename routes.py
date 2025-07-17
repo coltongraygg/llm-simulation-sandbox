@@ -4,7 +4,7 @@ from typing import List
 import uuid
 
 from database import get_db, Scenario, Run
-from schemas import ScenarioCreate, ScenarioResponse, RunResponse, RunSummary
+from schemas import ScenarioCreate, ScenarioResponse, RunResponse, RunSummary, StarUpdateRequest
 from simulation import simulation_engine
 
 router = APIRouter()
@@ -107,4 +107,25 @@ async def run_simulation(scenario_id: str, db: Session = Depends(get_db)):
         return db_run
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
+
+@router.patch("/runs/{run_id}/star", response_model=RunResponse)
+async def toggle_star(run_id: str, star_request: StarUpdateRequest, db: Session = Depends(get_db)):
+    """Toggle the starred status of a simulation run"""
+    try:
+        # Convert string to UUID
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid run ID format")
+    
+    # Get the run
+    run = db.query(Run).filter(Run.id == run_uuid).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Update starred status
+    run.starred = star_request.starred
+    db.commit()
+    db.refresh(run)
+    
+    return run 

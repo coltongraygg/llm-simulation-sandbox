@@ -12,6 +12,7 @@ class DriftwoodApp {
         this.setupNavigation();
         this.setupScenarioBuilder();
         this.setupConversationViewer();
+        this.setupHistoryViewer();
         this.setupNotifications();
         this.showView('scenario');
     }
@@ -48,6 +49,11 @@ class DriftwoodApp {
         const navBtn = document.getElementById(`nav-${viewName}`);
         if (navBtn) {
             navBtn.classList.add('active');
+        }
+
+        // Load history data when switching to history view
+        if (viewName === 'history') {
+            this.loadHistory();
         }
     }
 
@@ -287,6 +293,22 @@ class DriftwoodApp {
         }
     }
 
+    setupHistoryViewer() {
+        const filterAllBtn = document.getElementById('filter-all');
+        const filterStarredBtn = document.getElementById('filter-starred');
+        
+        filterAllBtn.addEventListener('click', () => {
+            this.setHistoryFilter('all');
+        });
+        
+        filterStarredBtn.addEventListener('click', () => {
+            this.setHistoryFilter('starred');
+        });
+        
+        this.currentHistoryFilter = 'all';
+        this.runsCache = null;
+    }
+
     setupConversationViewer() {
         const closeBtn = document.getElementById('close-conversation');
         closeBtn.addEventListener('click', () => {
@@ -422,6 +444,175 @@ class DriftwoodApp {
         closeBtn.addEventListener('click', () => {
             this.hideNotification();
         });
+    }
+
+    // History Management Methods
+    async loadHistory() {
+        try {
+            const loadingEl = document.getElementById('history-loading');
+            const emptyEl = document.getElementById('history-empty');
+            const listEl = document.getElementById('history-list');
+            
+            // Show loading state
+            loadingEl.style.display = 'flex';
+            emptyEl.classList.add('hidden');
+            listEl.innerHTML = '';
+            
+            // Fetch runs from API
+            const runs = await this.apiCall('/runs');
+            this.runsCache = runs;
+            
+            // Hide loading state
+            loadingEl.style.display = 'none';
+            
+            // Show empty state or populate list
+            if (runs.length === 0) {
+                emptyEl.classList.remove('hidden');
+            } else {
+                this.renderHistory(runs);
+            }
+            
+        } catch (error) {
+            document.getElementById('history-loading').style.display = 'none';
+            this.showNotification(`Failed to load history: ${error.message}`, 'error');
+        }
+    }
+
+    setHistoryFilter(filter) {
+        this.currentHistoryFilter = filter;
+        
+        // Update filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        if (filter === 'all') {
+            document.getElementById('filter-all').classList.add('active');
+        } else if (filter === 'starred') {
+            document.getElementById('filter-starred').classList.add('active');
+        }
+        
+        // Re-render history with filter
+        if (this.runsCache) {
+            this.renderHistory(this.runsCache);
+        }
+    }
+
+    renderHistory(runs) {
+        const listEl = document.getElementById('history-list');
+        
+        // Filter runs based on current filter
+        let filteredRuns = runs;
+        if (this.currentHistoryFilter === 'starred') {
+            filteredRuns = runs.filter(run => run.starred);
+        }
+        
+        // Sort by timestamp (latest first)
+        filteredRuns.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Render filtered runs
+        if (filteredRuns.length === 0) {
+            listEl.innerHTML = '<div class="history-empty"><p>No runs found for this filter.</p></div>';
+            return;
+        }
+        
+        listEl.innerHTML = filteredRuns.map(run => this.renderHistoryItem(run)).join('');
+    }
+
+    renderHistoryItem(run) {
+        const timestamp = new Date(run.timestamp).toLocaleString();
+        const relativeTime = this.getRelativeTime(run.timestamp);
+        
+        return `
+            <div class="history-item ${run.starred ? 'starred' : ''}" data-run-id="${run.id}">
+                <div class="history-item-header">
+                    <h3 class="history-item-title">${run.scenario_name || 'Unnamed Scenario'}</h3>
+                    <button class="history-item-star ${run.starred ? 'starred' : ''}" 
+                            onclick="window.driftwoodApp.toggleStar('${run.id}', ${!run.starred})">
+                        ⭐
+                    </button>
+                </div>
+                
+                <div class="history-item-meta">
+                    <div class="history-item-meta-item">
+                        <span>🕐</span>
+                        <span title="${timestamp}">${relativeTime}</span>
+                    </div>
+                    <div class="history-item-meta-item">
+                        <span>💬</span>
+                        <span>${this.getMessageCount(run)} messages</span>
+                    </div>
+                </div>
+                
+                <div class="history-item-actions">
+                    <span class="history-item-id">${run.id.substring(0, 8)}...</span>
+                    <button class="btn-view" onclick="window.driftwoodApp.viewHistoryItem('${run.id}')">
+                        View Conversation
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    async toggleStar(runId, starred) {
+        try {
+            const response = await this.apiCall(`/runs/${runId}/star`, 'PATCH', { starred });
+            
+            // Update the cache
+            if (this.runsCache) {
+                const run = this.runsCache.find(r => r.id === runId);
+                if (run) {
+                    run.starred = starred;
+                }
+            }
+            
+            // Re-render the history
+            if (this.runsCache) {
+                this.renderHistory(this.runsCache);
+            }
+            
+            this.showNotification(starred ? 'Run starred!' : 'Star removed', 'success');
+            
+        } catch (error) {
+            this.showNotification(`Failed to update star: ${error.message}`, 'error');
+        }
+    }
+
+    async viewHistoryItem(runId) {
+        try {
+            // Find the run in cache or fetch it
+            let run = this.runsCache ? this.runsCache.find(r => r.id === runId) : null;
+            
+            if (!run) {
+                // Fetch specific run if not in cache
+                run = await this.apiCall(`/runs/${runId}`);
+            }
+            
+            // Show the conversation
+            await this.showConversation(run);
+            
+        } catch (error) {
+            this.showNotification(`Failed to load conversation: ${error.message}`, 'error');
+        }
+    }
+
+    getRelativeTime(timestamp) {
+        const now = new Date();
+        const time = new Date(timestamp);
+        const diffInSeconds = Math.floor((now - time) / 1000);
+        
+        if (diffInSeconds < 60) return 'Just now';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+        if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+        
+        return time.toLocaleDateString();
+    }
+
+    getMessageCount(run) {
+        // This is a placeholder - the run summary doesn't include log data
+        // In a real implementation, you might want to add message count to the API response
+        return '~'; // Placeholder
     }
 
     // Utility methods

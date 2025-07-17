@@ -74,8 +74,28 @@
 
         <!-- History View -->
         <div id="view-history" class="view">
-            <h2>Simulation History</h2>
-            <p>View past simulation runs</p>
+            <div class="history-header">
+                <h2>Simulation History</h2>
+                <div class="history-filters">
+                    <button id="filter-all" class="filter-btn active">All Runs</button>
+                    <button id="filter-starred" class="filter-btn">⭐ Starred</button>
+                </div>
+            </div>
+            
+            <div id="history-container" class="history-container">
+                <div id="history-loading" class="history-loading">
+                    <div class="spinner"></div>
+                    <p>Loading simulation history...</p>
+                </div>
+                
+                <div id="history-empty" class="history-empty hidden">
+                    <p>No simulation runs found. Create your first scenario to get started!</p>
+                </div>
+                
+                <div id="history-list" class="history-list">
+                    <!-- History items will be loaded here -->
+                </div>
+            </div>
         </div>
 
         <!-- Conversation Viewer -->

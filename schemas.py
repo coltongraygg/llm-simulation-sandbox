@@ -50,4 +50,7 @@ class RunSummary(BaseModel):
     scenario_name: Optional[str] = None
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+class StarUpdateRequest(BaseModel):
+    starred: bool 
