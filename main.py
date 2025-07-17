@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 import uvicorn
 import os
 from database import init_db
+from routes import router
 
 # Create FastAPI app
 app = FastAPI(title="Driftwood LLM Simulation Lab", version="1.0.0")
@@ -23,6 +24,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routes
+app.include_router(router)
+
 # Mount static files
 if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -40,4 +44,4 @@ async def health_check():
     return {"status": "healthy", "message": "Server is running"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
