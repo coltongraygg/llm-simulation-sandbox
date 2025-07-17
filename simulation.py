@@ -18,7 +18,7 @@ class SimulationEngine:
         settings: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
-        Run a simulation where AI responds to each participant's initial message
+        Run a group mediation simulation where all participants speak first, then AI mediates
         
         Args:
             participants: List of participant dictionaries with initial_message
@@ -33,28 +33,26 @@ class SimulationEngine:
         # Build context for the AI
         context = self._build_context(participants, system_prompt)
         
-        # Process each participant's initial message
+        # Step 1: All participants share their initial messages first
         for participant in participants:
-            # Add participant's message to log
             conversation_log.append({
                 "speaker": participant["name"],
                 "content": participant["initial_message"],
                 "timestamp": datetime.utcnow().isoformat()
             })
-            
-            # Get AI response to this participant
-            ai_response = await self._get_ai_response(
-                context,
-                participant,
-                settings
-            )
-            
-            # Add AI response to log
-            conversation_log.append({
-                "speaker": "AI",
-                "content": ai_response,
-                "timestamp": datetime.utcnow().isoformat()
-            })
+        
+        # Step 2: AI mediator responds to the full group conversation
+        ai_response = await self._get_ai_group_response(
+            context,
+            conversation_log,
+            settings
+        )
+        
+        conversation_log.append({
+            "speaker": "AI",
+            "content": ai_response,
+            "timestamp": datetime.utcnow().isoformat()
+        })
         
         return conversation_log
     
@@ -68,18 +66,33 @@ class SimulationEngine:
             context += f"  Perspective: {participant['perspective']}\n"
             context += f"  Emotional state: {', '.join(participant['meta_tags'])}\n\n"
         
+        context += "IMPORTANT INSTRUCTIONS:\n"
+        context += "- You are the AI mediator facilitating a group conversation.\n"
+        context += "- All participants have shared their opening thoughts.\n"
+        context += "- Respond to the group as a whole, addressing themes and facilitating dialogue.\n" 
+        context += "- Do not include any speaker labels or prefixes in your response.\n"
+        context += "- Do not simulate or speak for participants.\n"
+        context += "- Your response should be your direct words to the group.\n\n"
+        
         return context
     
-    async def _get_ai_response(
+    async def _get_ai_group_response(
         self, 
         context: str, 
-        current_participant: Dict[str, Any],
+        conversation_log: List[Dict[str, Any]],
         settings: Dict[str, Any]
     ) -> str:
-        """Get AI response to a specific participant's message"""
+        """Get AI mediator response to the full group conversation"""
         try:
-            # Just provide the participant's message and context
-            user_message = f"{current_participant['name']}: {current_participant['initial_message']}"
+            # Format all participant messages for the AI
+            participant_messages = []
+            for msg in conversation_log:
+                if msg["speaker"] != "AI":
+                    participant_messages.append(f"{msg['speaker']}: {msg['content']}")
+            
+            conversation_text = "\n\n".join(participant_messages)
+            
+            user_message = f"Here's what each participant has shared:\n\n{conversation_text}\n\nAs the group mediator, please respond to facilitate dialogue and understanding between all participants."
             
             messages = [
                 {"role": "system", "content": context},

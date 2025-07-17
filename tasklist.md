@@ -100,11 +100,7 @@
 
 ## Phase 8: Testing & Polish
 - [ ] Test full simulation workflow end-to-end
-- [ ] Verify database persistence across sessions
 - [ ] Test error handling for invalid inputs
-- [ ] Validate OpenAI API error scenarios
-- [ ] Test UI responsiveness on different screen sizes
-- [ ] Add proper logging throughout application
 - [ ] Create basic documentation for running the app
 
 **Notes:** [LLM: Summarize testing results, bugs found and fixed, performance observations, or deployment considerations here]
@@ -114,9 +110,7 @@
 ## Phase 9: Final Integration & Deployment
 - [ ] Verify all features work together seamlessly
 - [ ] Test simulation quality with various scenarios
-- [ ] Optimize database queries and API performance
-- [ ] Add any missing error messages or user feedback
 - [ ] Create startup script for easy local deployment
-- [ ] Document any known limitations or future improvements
+- [ ] Update README.md with sections such as Overview, Tech Stack, Instructions (ie, how to use).
 
 **Notes:** [LLM: Document final integration challenges, performance optimizations made, or recommendations for future development here]

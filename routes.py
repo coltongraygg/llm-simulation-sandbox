@@ -128,4 +128,33 @@ async def toggle_star(run_id: str, star_request: StarUpdateRequest, db: Session 
     db.commit()
     db.refresh(run)
     
-    return run 
+    return run
+
+@router.delete("/runs/{run_id}")
+async def delete_run(run_id: str, db: Session = Depends(get_db)):
+    """Delete a specific simulation run"""
+    try:
+        # Convert string to UUID
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid run ID format")
+    
+    # Get the run
+    run = db.query(Run).filter(Run.id == run_uuid).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Delete the run
+    db.delete(run)
+    db.commit()
+    
+    return {"message": "Run deleted successfully"}
+
+@router.delete("/runs")
+async def delete_all_unstarred_runs(db: Session = Depends(get_db)):
+    """Delete all simulation runs except starred ones"""
+    # Delete only unstarred runs
+    deleted_count = db.query(Run).filter(Run.starred == False).delete()
+    db.commit()
+    
+    return {"message": f"Deleted {deleted_count} unstarred runs", "deleted_count": deleted_count} 

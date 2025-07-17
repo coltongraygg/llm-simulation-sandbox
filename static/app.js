@@ -87,11 +87,9 @@ class DriftwoodApp {
     setupScenarioBuilder() {
         const addParticipantBtn = document.getElementById('add-participant');
         const scenarioForm = document.getElementById('scenario-form');
-        const runSimulationBtn = document.getElementById('run-simulation');
 
         addParticipantBtn.addEventListener('click', () => this.addParticipant());
-        scenarioForm.addEventListener('submit', (e) => this.saveScenario(e));
-        runSimulationBtn.addEventListener('click', () => this.runSimulation());
+        scenarioForm.addEventListener('submit', (e) => this.saveAndRunScenario(e));
 
         // Add initial participant
         this.addParticipant();
@@ -180,7 +178,7 @@ class DriftwoodApp {
         if (participant) {
             participant[field] = value;
         }
-        this.updateRunButtonState();
+        // No longer need to update run button state
     }
 
     updateMetaTag(participantId, index, value) {
@@ -193,8 +191,6 @@ class DriftwoodApp {
             
             // Update the specific index
             participant.meta_tags[index] = value.trim();
-            
-            this.updateRunButtonState();
         }
     }
 
@@ -213,11 +209,8 @@ class DriftwoodApp {
         });
     }
 
-    updateRunButtonState() {
-        const runBtn = document.getElementById('run-simulation');
-        const isValid = this.validateScenario();
-        runBtn.disabled = !isValid || !this.currentScenarioId;
-    }
+    // No longer needed - removed run button state management
+    // Form validation is now handled in saveAndRunScenario
 
     validateScenario() {
         const name = document.getElementById('scenario-name').value.trim();
@@ -233,7 +226,7 @@ class DriftwoodApp {
         );
     }
 
-    async saveScenario(event) {
+    async saveAndRunScenario(event) {
         event.preventDefault();
         
         if (!this.validateScenario()) {
@@ -260,34 +253,21 @@ class DriftwoodApp {
         };
 
         try {
-            this.showLoading(true);
-            const response = await this.apiCall('/scenarios', 'POST', scenarioData);
-            this.currentScenarioId = response.id;
-            this.showNotification('Scenario saved successfully!', 'success');
-            this.updateRunButtonState();
-        } catch (error) {
-            this.showNotification(`Failed to save scenario: ${error.message}`, 'error');
-        } finally {
-            this.showLoading(false);
-        }
-    }
-
-    async runSimulation() {
-        if (!this.currentScenarioId) {
-            this.showNotification('Please save the scenario first', 'error');
-            return;
-        }
-
-        try {
-            this.showLoading(true, 'Running simulation...');
+            this.showLoading(true, 'Creating scenario and running simulation...');
             
-            const response = await this.apiCall(`/run?scenario_id=${this.currentScenarioId}`, 'POST');
+            // Step 1: Save scenario
+            const scenarioResponse = await this.apiCall('/scenarios', 'POST', scenarioData);
+            
+            // Step 2: Run simulation immediately
+            const runResponse = await this.apiCall(`/run?scenario_id=${scenarioResponse.id}`, 'POST');
+            
             this.showNotification('Simulation completed successfully!', 'success');
             
             // Switch to conversation viewer
-            this.showConversation(response);
+            await this.showConversation(runResponse);
+            
         } catch (error) {
-            this.showNotification(`Simulation failed: ${error.message}`, 'error');
+            this.showNotification(`Failed to run simulation: ${error.message}`, 'error');
         } finally {
             this.showLoading(false);
         }
@@ -296,6 +276,7 @@ class DriftwoodApp {
     setupHistoryViewer() {
         const filterAllBtn = document.getElementById('filter-all');
         const filterStarredBtn = document.getElementById('filter-starred');
+        const deleteAllBtn = document.getElementById('delete-all-unstarred');
         
         filterAllBtn.addEventListener('click', () => {
             this.setHistoryFilter('all');
@@ -303,6 +284,10 @@ class DriftwoodApp {
         
         filterStarredBtn.addEventListener('click', () => {
             this.setHistoryFilter('starred');
+        });
+        
+        deleteAllBtn.addEventListener('click', () => {
+            this.deleteAllUnstarred();
         });
         
         this.currentHistoryFilter = 'all';
@@ -549,6 +534,9 @@ class DriftwoodApp {
                     <button class="btn-view" onclick="window.driftwoodApp.viewHistoryItem('${run.id}')">
                         View Conversation
                     </button>
+                    <button class="btn-delete" onclick="window.driftwoodApp.deleteRun('${run.id}')">
+                        Delete
+                    </button>
                 </div>
             </div>
         `;
@@ -593,6 +581,67 @@ class DriftwoodApp {
             
         } catch (error) {
             this.showNotification(`Failed to load conversation: ${error.message}`, 'error');
+        }
+    }
+
+    async deleteRun(runId) {
+        if (!confirm('Are you sure you want to delete this simulation run?')) {
+            return;
+        }
+        
+        try {
+            await this.apiCall(`/runs/${runId}`, 'DELETE');
+            
+            // Remove from cache
+            if (this.runsCache) {
+                this.runsCache = this.runsCache.filter(run => run.id !== runId);
+            }
+            
+            // Re-render history
+            if (this.runsCache) {
+                this.renderHistory(this.runsCache);
+            }
+            
+            this.showNotification('Run deleted successfully', 'success');
+            
+        } catch (error) {
+            this.showNotification(`Failed to delete run: ${error.message}`, 'error');
+        }
+    }
+
+    async deleteAllUnstarred() {
+        const unstarredCount = this.runsCache ? this.runsCache.filter(run => !run.starred).length : 0;
+        
+        if (unstarredCount === 0) {
+            this.showNotification('No unstarred runs to delete', 'info');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to delete all ${unstarredCount} unstarred simulation runs? This action cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            this.showLoading(true, 'Deleting unstarred runs...');
+            
+            const response = await this.apiCall('/runs', 'DELETE');
+            
+            // Update cache - keep only starred runs
+            if (this.runsCache) {
+                this.runsCache = this.runsCache.filter(run => run.starred);
+            }
+            
+            // Re-render history
+            if (this.runsCache) {
+                this.renderHistory(this.runsCache);
+            }
+            
+            this.showNotification(`Deleted ${response.deleted_count} unstarred runs`, 'success');
+            
+        } catch (error) {
+            this.showNotification(`Failed to delete runs: ${error.message}`, 'error');
+        } finally {
+            this.showLoading(false);
         }
     }
 

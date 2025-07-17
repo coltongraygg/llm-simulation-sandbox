@@ -66,8 +66,7 @@
                 </div>
 
                 <div class="form-actions">
-                    <button type="submit" class="btn-primary">Save Scenario</button>
-                    <button type="button" id="run-simulation" class="btn-primary" disabled>Run Simulation</button>
+                    <button type="submit" class="btn-primary">Run Simulation</button>
                 </div>
             </form>
         </div>
@@ -76,9 +75,12 @@
         <div id="view-history" class="view">
             <div class="history-header">
                 <h2>Simulation History</h2>
-                <div class="history-filters">
-                    <button id="filter-all" class="filter-btn active">All Runs</button>
-                    <button id="filter-starred" class="filter-btn">⭐ Starred</button>
+                <div class="history-controls">
+                    <div class="history-filters">
+                        <button id="filter-all" class="filter-btn active">All Runs</button>
+                        <button id="filter-starred" class="filter-btn">⭐ Starred</button>
+                    </div>
+                    <button id="delete-all-unstarred" class="btn-delete-all">DELETE ALL</button>
                 </div>
             </div>
             
