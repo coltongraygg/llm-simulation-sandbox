@@ -11,6 +11,8 @@ class DriftwoodApp {
     init() {
         this.setupNavigation();
         this.setupScenarioBuilder();
+        this.setupConversationViewer();
+        this.setupNotifications();
         this.showView('scenario');
     }
 
@@ -271,11 +273,10 @@ class DriftwoodApp {
         }
 
         try {
-            this.showLoading(true);
-            this.showNotification('Running simulation...', 'info');
+            this.showLoading(true, 'Running simulation...');
             
             const response = await this.apiCall(`/run?scenario_id=${this.currentScenarioId}`, 'POST');
-            this.showNotification('Simulation completed!', 'success');
+            this.showNotification('Simulation completed successfully!', 'success');
             
             // Switch to conversation viewer
             this.showConversation(response);
@@ -286,21 +287,175 @@ class DriftwoodApp {
         }
     }
 
-    showConversation(runData) {
-        // TODO: Implement in Phase 6
-        console.log('Show conversation:', runData);
-        this.showNotification('Conversation viewer will be implemented in Phase 6', 'info');
+    setupConversationViewer() {
+        const closeBtn = document.getElementById('close-conversation');
+        closeBtn.addEventListener('click', () => {
+            this.showView('history');
+        });
+    }
+
+    async showConversation(runData) {
+        try {
+            this.showLoading(true, 'Loading conversation...');
+
+            // Get full run details if we only have basic data
+            let fullRunData = runData;
+            if (!runData.log) {
+                fullRunData = await this.apiCall(`/runs/${runData.id}`);
+            }
+
+            // Get scenario details
+            const scenario = await this.apiCall(`/scenarios`);
+            const runScenario = scenario.find(s => s.id === fullRunData.scenario_id);
+
+            if (!runScenario) {
+                this.showNotification('Scenario not found', 'error');
+                return;
+            }
+
+            // Populate the conversation viewer
+            this.populateConversationContext(runScenario, fullRunData);
+            this.populateConversationLog(fullRunData.log);
+
+            // Switch to conversation view
+            this.showView('conversation');
+
+        } catch (error) {
+            this.showNotification(`Failed to load conversation: ${error.message}`, 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    populateConversationContext(scenario, runData) {
+        // Update title
+        document.getElementById('conversation-title').textContent = scenario.name;
+
+        // System Prompt
+        const systemPromptEl = document.getElementById('context-system-prompt');
+        systemPromptEl.innerHTML = `<p>${scenario.system_prompt}</p>`;
+
+        // Model Settings
+        const settingsEl = document.getElementById('context-settings');
+        settingsEl.innerHTML = `
+            <div class="setting-item">
+                <span class="setting-label">Model:</span>
+                <span>${scenario.settings.model}</span>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Temperature:</span>
+                <span>${scenario.settings.temperature}</span>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Max Tokens:</span>
+                <span>${scenario.settings.max_tokens}</span>
+            </div>
+        `;
+
+        // Participants
+        const participantsEl = document.getElementById('context-participants');
+        participantsEl.innerHTML = scenario.participants.map(participant => `
+            <div class="participant-item">
+                <div class="participant-name">${participant.name}</div>
+                <div class="participant-role">${participant.role}</div>
+                <div class="participant-perspective">${participant.perspective}</div>
+                <div class="participant-tags">
+                    ${participant.meta_tags.map(tag => `
+                        <span class="participant-tag">${tag}</span>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+
+        // Update conversation timestamp
+        const timestampEl = document.getElementById('conversation-timestamp');
+        const timestamp = new Date(runData.timestamp).toLocaleString();
+        timestampEl.textContent = timestamp;
+    }
+
+    populateConversationLog(conversationLog) {
+        const chatLogEl = document.getElementById('chat-log');
+        const messageCountEl = document.getElementById('message-count');
+
+        // Update message count
+        messageCountEl.textContent = `${conversationLog.length} messages`;
+
+        // Clear existing messages
+        chatLogEl.innerHTML = '';
+
+        // Add messages
+        conversationLog.forEach((message, index) => {
+            const messageEl = document.createElement('div');
+            const isAI = message.speaker === 'AI';
+            
+            messageEl.className = `message ${isAI ? 'ai-message' : 'participant-message'}`;
+            
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            
+            messageEl.innerHTML = `
+                <div class="message-header">
+                    <span class="message-speaker ${isAI ? 'ai' : 'participant'}">
+                        ${isAI ? '🤖 AI (Driftwood)' : '👤 ' + message.speaker}
+                    </span>
+                    <span class="message-timestamp">${timestamp}</span>
+                </div>
+                <div class="message-content">${this.formatMessageContent(message.content)}</div>
+            `;
+
+            chatLogEl.appendChild(messageEl);
+        });
+
+        // Scroll to bottom
+        chatLogEl.scrollTop = chatLogEl.scrollHeight;
+    }
+
+    formatMessageContent(content) {
+        // Basic formatting - convert line breaks to <br> and preserve whitespace
+        return content
+            .replace(/\n/g, '<br>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold **text**
+            .replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic *text*
+    }
+
+    setupNotifications() {
+        const closeBtn = document.getElementById('notification-close');
+        closeBtn.addEventListener('click', () => {
+            this.hideNotification();
+        });
     }
 
     // Utility methods
     showNotification(message, type = 'info') {
+        const notification = document.getElementById('notification');
+        const messageEl = document.getElementById('notification-message');
+        
+        messageEl.textContent = message;
+        notification.className = `notification ${type}`;
+        notification.classList.remove('hidden');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            this.hideNotification();
+        }, 5000);
+        
         console.log(`${type.toUpperCase()}: ${message}`);
-        // Will implement proper notification UI in later phases
     }
 
-    showLoading(show = true) {
-        console.log(`Loading: ${show}`);
-        // Will implement proper loading UI in later phases
+    hideNotification() {
+        const notification = document.getElementById('notification');
+        notification.classList.add('hidden');
+    }
+
+    showLoading(show = true, message = 'Processing...') {
+        const overlay = document.getElementById('loading-overlay');
+        const messageEl = document.getElementById('loading-message');
+        
+        if (show) {
+            messageEl.textContent = message;
+            overlay.classList.remove('hidden');
+        } else {
+            overlay.classList.add('hidden');
+        }
     }
 }
 
