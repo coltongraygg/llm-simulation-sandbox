@@ -8,6 +8,7 @@ class ParticipantModel(BaseModel):
     role: str
     perspective: str
     meta_tags: List[str]
+    initial_message: str
 
 class SettingsModel(BaseModel):
     model: str = "gpt-4"

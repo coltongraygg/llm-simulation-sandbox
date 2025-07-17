@@ -5,6 +5,7 @@ import uuid
 
 from database import get_db, Scenario, Run
 from schemas import ScenarioCreate, ScenarioResponse, RunResponse, RunSummary
+from simulation import simulation_engine
 
 router = APIRouter()
 
@@ -69,4 +70,41 @@ async def get_run(run_id: str, db: Session = Depends(get_db)):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    return run 
+    return run
+
+@router.post("/run", response_model=RunResponse)
+async def run_simulation(scenario_id: str, db: Session = Depends(get_db)):
+    """Run a simulation based on a scenario and return the conversation log"""
+    try:
+        # Convert string to UUID
+        scenario_uuid = uuid.UUID(scenario_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid scenario ID format")
+    
+    # Get the scenario
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_uuid).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    try:
+        # Run the simulation
+        conversation_log = await simulation_engine.run_simulation(
+            participants=scenario.participants,
+            system_prompt=scenario.system_prompt,
+            settings=scenario.settings
+        )
+        
+        # Save the run to database
+        db_run = Run(
+            scenario_id=scenario.id,
+            log=conversation_log
+        )
+        
+        db.add(db_run)
+        db.commit()
+        db.refresh(db_run)
+        
+        return db_run
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}") 
